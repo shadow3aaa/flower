@@ -1,7 +1,13 @@
+use std::collections::HashMap;
+use std::{env, ptr};
+
+use aya::maps::{MapData, RingBuf};
 use aya::programs::KProbe;
-use aya::{include_bytes_aligned, Bpf};
-use aya_log::BpfLogger;
-use log::{info, warn, debug};
+use aya::{include_bytes_aligned, maps, Ebpf};
+use aya_log::EbpfLogger;
+use flower_common::{Args, FutexEvent};
+use log::{debug, error, info, warn};
+use mio::Poll;
 use tokio::signal;
 
 #[tokio::main]
@@ -24,24 +30,60 @@ async fn main() -> Result<(), anyhow::Error> {
     // like to specify the eBPF program at runtime rather than at compile-time, you can
     // reach for `Bpf::load_file` instead.
     #[cfg(debug_assertions)]
-    let mut bpf = Bpf::load(include_bytes_aligned!(
+    let mut bpf = Ebpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/debug/flower"
     ))?;
     #[cfg(not(debug_assertions))]
-    let mut bpf = Bpf::load(include_bytes_aligned!(
+    let mut bpf = Ebpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/release/flower"
     ))?;
-    if let Err(e) = BpfLogger::init(&mut bpf) {
+    if let Err(e) = EbpfLogger::init(&mut bpf) {
         // This can happen if you remove all log statements from your eBPF program.
         warn!("failed to initialize eBPF logger: {}", e);
     }
     let program: &mut KProbe = bpf.program_mut("flower").unwrap().try_into()?;
     program.load()?;
+
     program.attach("__arm64_sys_futex", 0)?;
 
-    info!("Waiting for Ctrl-C...");
-    signal::ctrl_c().await?;
-    info!("Exiting...");
+    let mut map = maps::Array::<_, Args>::try_from(bpf.map_mut("ARG").unwrap())?;
+    map.set(
+        0,
+        Args {
+            target_pid: env::args().nth(1).unwrap().parse()?,
+        },
+        0,
+    )?;
+
+    let channel = RingBuf::try_from(bpf.take_map("CHANNEL").unwrap())?;
+    receiver(channel).await;
 
     Ok(())
+}
+
+async fn receiver(mut channel: RingBuf<MapData>) {
+    // let poll = Poll::new().unwrap();
+    let mut wake_op_map = HashMap::new();
+    loop {
+        if let Some(event) = channel.next() {
+            let event: FutexEvent = unsafe { trans(&event) };
+            debug!("{event:?}");
+            match event {
+                FutexEvent::Wake(tid, addr) => {
+                    wake_op_map.insert(addr, tid);
+                }
+                FutexEvent::Wait(tid, addr) => {
+                    if let Some(waker_tid) = wake_op_map.get(&addr) {
+                        info!("{tid} is waken by {waker_tid}");
+                    } else {
+                        debug!("Can't find waker for {tid}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+const unsafe fn trans<T>(buf: &[u8]) -> T {
+    ptr::read_unaligned(buf.as_ptr().cast::<T>())
 }

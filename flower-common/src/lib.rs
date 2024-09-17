@@ -1,1 +1,22 @@
 #![no_std]
+pub mod error_codes;
+pub mod futex_args;
+
+#[cfg(feature = "user")]
+use aya::Pod;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Args {
+    pub target_pid: u32,
+}
+
+#[cfg(feature = "user")]
+unsafe impl Pod for Args {}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub enum FutexEvent {
+    Wake(i32, usize),
+    Wait(i32, usize),
+}

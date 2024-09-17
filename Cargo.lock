@@ -108,8 +108,7 @@ checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
 [[package]]
 name = "aya"
 version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90eea657cc8028447cbda5068f4e10c4fadba0131624f4f7dd1a9c46ffc8d81f"
+source = "git+https://github.com/aya-rs/aya#b87f4b9642a719bb9c022f49ea8b760d48b0bf07"
 dependencies = [
  "assert_matches",
  "aya-obj",
@@ -118,7 +117,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "log",
- "object 0.32.2",
+ "object",
  "thiserror",
  "tokio",
 ]
@@ -126,8 +125,7 @@ dependencies = [
 [[package]]
 name = "aya-log"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f11a92f305b983e9f53433457dede617a4ad0aa22e4702220092f39e844c1a2"
+source = "git+https://github.com/aya-rs/aya#b87f4b9642a719bb9c022f49ea8b760d48b0bf07"
 dependencies = [
  "aya",
  "aya-log-common",
@@ -140,8 +138,7 @@ dependencies = [
 [[package]]
 name = "aya-log-common"
 version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6d38a351ee2d5dc24e04cac6184b1b39408642d9a8b585892c99146f8dd4edb"
+source = "git+https://github.com/aya-rs/aya#b87f4b9642a719bb9c022f49ea8b760d48b0bf07"
 dependencies = [
  "num_enum",
 ]
@@ -149,14 +146,13 @@ dependencies = [
 [[package]]
 name = "aya-obj"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c02024a307161cf3d1f052161958fd13b1a33e3e038083e58082c0700fdab85"
+source = "git+https://github.com/aya-rs/aya#b87f4b9642a719bb9c022f49ea8b760d48b0bf07"
 dependencies = [
  "bytes",
  "core-error",
  "hashbrown",
  "log",
- "object 0.32.2",
+ "object",
  "thiserror",
 ]
 
@@ -170,7 +166,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "miniz_oxide",
- "object 0.36.4",
+ "object",
  "rustc-demangle",
  "windows-targets",
 ]
@@ -249,6 +245,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc32fast"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "env_logger"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -262,6 +267,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "equivalent"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
+
+[[package]]
 name = "flower"
 version = "0.1.0"
 dependencies = [
@@ -272,6 +283,7 @@ dependencies = [
  "flower-common",
  "libc",
  "log",
+ "mio",
  "tokio",
 ]
 
@@ -321,6 +333,16 @@ name = "humantime"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
+
+[[package]]
+name = "indexmap"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68b900aa2f7301e21c36462b170ee99994de34dff39a4a6a528e80e7376d07e5"
+dependencies = [
+ "equivalent",
+ "hashbrown",
+]
 
 [[package]]
 name = "is-terminal"
@@ -380,6 +402,7 @@ checksum = "80e04d1dcff3aae0704555fe5fee3bcfaf3d1fdf8a7e521d5b9d2b42acb52cec"
 dependencies = [
  "hermit-abi 0.3.9",
  "libc",
+ "log",
  "wasi",
  "windows-sys 0.52.0",
 ]
@@ -406,19 +429,13 @@ dependencies = [
 
 [[package]]
 name = "object"
-version = "0.32.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6a622008b6e321afc04970976f62ee297fdbaa6f95318ca343e3eebb9648441"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "object"
 version = "0.36.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "084f1a5821ac4c651660a94a7153d27ac9d8a53736203f58b31945ded098070a"
 dependencies = [
+ "crc32fast",
+ "hashbrown",
+ "indexmap",
  "memchr",
 ]
 
