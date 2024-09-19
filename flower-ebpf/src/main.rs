@@ -1,62 +1,100 @@
 #![no_std]
 #![no_main]
-mod futex;
-
-use core::ffi::{c_int, c_long};
-
 use aya_ebpf::{
-    helpers::{bpf_probe_read, bpf_probe_read_user}, macros::{kprobe, kretprobe, map}, maps::{self, RingBuf}, programs::{ProbeContext, RetProbeContext}, EbpfContext
+    macros::{map, tracepoint}, maps::{self, HashMap, RingBuf}, programs::TracePointContext, EbpfContext
 };
-use aya_log_ebpf::{debug, error, info};
+use aya_log_ebpf::debug;
 use flower_common::{
     error_codes::{ERR_CODE_ARG_NOT_INITED, ERR_CODE_NOT_TARGET_PROCESS},
     futex_args::FutexArgs,
     Args, FutexEvent,
 };
-use futex::parse_futex;
 
 #[map]
 static ARG: maps::Array<Args> = maps::Array::<Args>::with_max_entries(1, 0);
 #[map]
 static CHANNEL: RingBuf = RingBuf::with_byte_size(0x1000, 0);
+#[map]
+static mut CONTEXT: HashMap<u32, FutexArgs> = HashMap::with_max_entries(64, 0);
 
-#[kprobe]
-pub fn flower(ctx: ProbeContext) -> u32 {
-    match try_flower(ctx) {
-        Ok(ret) => ret,
-        Err(ret) => ret,
-    }
+const FUTEX_ID_AARCH64: u64 = 98;
+const FUTEX_ID_X86_64: u64 = 240;
+
+#[tracepoint]
+pub fn flower_futex_enter(ctx: TracePointContext) {
+    let _ = try_flower_enter(ctx);
 }
 
-fn try_flower(ctx: ProbeContext) -> Result<u32, u32> {
+fn try_flower_enter(ctx: TracePointContext) -> Result<u32, i64> {
     let Some(arg) = ARG.get(0) else {
         return Err(ERR_CODE_ARG_NOT_INITED);
     };
+
     if ctx.tgid() != arg.target_pid {
         return Err(ERR_CODE_NOT_TARGET_PROCESS);
     }
 
+    let syscall_id = unsafe { ctx.read_at::<u64>(8).unwrap() };
+    // todo: apply for x86_64
+    if syscall_id != FUTEX_ID_AARCH64 {
+        return Ok(0);
+    }
+
+    let args: [usize; 6] = unsafe { ctx.read_at(16) }.unwrap();
+
     let futex_args = FutexArgs {
-        uaddr: ctx.arg(4).unwrap(),
-        futex_op: ctx.arg(3).unwrap(),
-        val: ctx.arg(0).unwrap(),
-        timeout: ctx.arg(5).unwrap(),
-        uaddr2: ctx.arg(2).unwrap(),
-        val3: ctx.arg(1).unwrap(),
+        uaddr: args[0],
+        futex_op: args[1] as i32,
+        val: args[2] as u32,
+        uaddr2: args[4],
+        val3: args[5] as u32,
     };
 
-    debug!(&ctx, "uaddr: 0x{}", futex_args.uaddr as usize);
-    debug!(&ctx, "futex op: {}", futex_args.futex_op);
-    debug!(&ctx, "val: {}", futex_args.val);
-    debug!(&ctx, "timeout: {}", futex_args.timeout as usize);
-    debug!(&ctx, "uaddr2: 0x{}", futex_args.uaddr2 as usize);
-    debug!(&ctx, "val3: {}", futex_args.val3);
+    unsafe {
+        let _ = CONTEXT.insert(&ctx.pid(), &futex_args, 0);
+    }
 
-    // Do Null Check *Here* To Make eBPF verifier Happy 
-    let Some(event) = parse_futex(&ctx, futex_args, ctx.pid() as i32) else {
+    Ok(0)
+}
+
+#[tracepoint]
+pub fn flower_futex_exit(ctx: TracePointContext) {
+    let _ = try_flower_exit(ctx);
+}
+
+fn try_flower_exit(ctx: TracePointContext) -> Result<u32, i64> {
+    let Some(arg) = ARG.get(0) else {
+        return Err(ERR_CODE_ARG_NOT_INITED);
+    };
+
+    if ctx.tgid() != arg.target_pid {
+        return Err(ERR_CODE_NOT_TARGET_PROCESS);
+    }
+
+    let syscall_id = unsafe { ctx.read_at::<u64>(8).unwrap() };
+    // todo: apply for x86_64
+    if syscall_id != FUTEX_ID_AARCH64 {
+        return Ok(0);
+    }
+
+    let Some(futex_args) = (unsafe {
+        CONTEXT.get(&ctx.pid()).copied()
+    }) else {
         return Ok(0);
     };
 
+    let ret = unsafe { ctx.read_at::<i64>(16)? };
+
+    if ret < 0 {
+        return Ok(0);
+    }
+
+    let event = FutexEvent {
+        tid: ctx.pid(),
+        args: futex_args,
+        ret,
+    };
+    
     if let Some(mut entry) = CHANNEL.reserve::<FutexEvent>(0) {
         entry.write(event);
         entry.submit(0);

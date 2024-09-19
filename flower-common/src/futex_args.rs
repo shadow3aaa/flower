@@ -1,10 +1,9 @@
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct FutexArgs {
-    pub uaddr: *const u32,
+    pub uaddr: usize,
     pub futex_op: i32,
     pub val: u32,
-    pub timeout: *const timespec,
-    pub uaddr2: *const u32,
+    pub uaddr2: usize,
     pub val3: u32,
 }
 

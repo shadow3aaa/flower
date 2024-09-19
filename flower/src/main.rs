@@ -1,14 +1,14 @@
-use std::collections::HashMap;
+mod flow_web;
+
 use std::{env, ptr};
 
 use aya::maps::{MapData, RingBuf};
-use aya::programs::KProbe;
+use aya::programs::TracePoint;
 use aya::{include_bytes_aligned, maps, Ebpf};
 use aya_log::EbpfLogger;
+use flow_web::FlowWeb;
 use flower_common::{Args, FutexEvent};
-use log::{debug, error, info, warn};
-use mio::Poll;
-use tokio::signal;
+use log::{debug, warn};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -41,10 +41,12 @@ async fn main() -> Result<(), anyhow::Error> {
         // This can happen if you remove all log statements from your eBPF program.
         warn!("failed to initialize eBPF logger: {}", e);
     }
-    let program: &mut KProbe = bpf.program_mut("flower").unwrap().try_into()?;
-    program.load()?;
-
-    program.attach("__arm64_sys_futex", 0)?;
+    let program_enter: &mut TracePoint = bpf.program_mut("flower_futex_enter").unwrap().try_into()?;
+    program_enter.load()?;
+    program_enter.attach("raw_syscalls", "sys_enter")?;
+    let program_exit: &mut TracePoint = bpf.program_mut("flower_futex_exit").unwrap().try_into()?;
+    program_exit.load()?;
+    program_exit.attach("raw_syscalls", "sys_exit")?;
 
     let mut map = maps::Array::<_, Args>::try_from(bpf.map_mut("ARG").unwrap())?;
     map.set(
@@ -62,24 +64,12 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 async fn receiver(mut channel: RingBuf<MapData>) {
-    // let poll = Poll::new().unwrap();
-    let mut wake_op_map = HashMap::new();
+    let mut web = FlowWeb::new();
     loop {
         if let Some(event) = channel.next() {
             let event: FutexEvent = unsafe { trans(&event) };
-            debug!("{event:?}");
-            match event {
-                FutexEvent::Wake(tid, addr) => {
-                    wake_op_map.insert(addr, tid);
-                }
-                FutexEvent::Wait(tid, addr) => {
-                    if let Some(waker_tid) = wake_op_map.get(&addr) {
-                        info!("{tid} is waken by {waker_tid}");
-                    } else {
-                        debug!("Can't find waker for {tid}");
-                    }
-                }
-            }
+            web.process_event(event);
+            debug!("{:#?}", web);
         }
     }
 }

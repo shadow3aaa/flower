@@ -1,3 +1,3 @@
-pub const ERR_CODE_ARG_NOT_INITED: u32 = 1;
-pub const ERR_CODE_NOT_TARGET_PROCESS: u32 = 2;
-pub const ERR_CODE_FUTEX_FAILED: u32 = 3;
+pub const ERR_CODE_ARG_NOT_INITED: i64 = 1;
+pub const ERR_CODE_NOT_TARGET_PROCESS: i64 = 2;
+pub const ERR_CODE_FUTEX_FAILED: i64 = 3;

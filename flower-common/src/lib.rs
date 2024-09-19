@@ -4,6 +4,7 @@ pub mod futex_args;
 
 #[cfg(feature = "user")]
 use aya::Pod;
+use futex_args::FutexArgs;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -16,7 +17,8 @@ unsafe impl Pod for Args {}
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub enum FutexEvent {
-    Wake(i32, usize),
-    Wait(i32, usize),
+pub struct FutexEvent {
+    pub tid: u32,
+    pub args: FutexArgs,
+    pub ret: i64,
 }
