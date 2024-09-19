@@ -68,8 +68,9 @@ async fn receiver(mut channel: RingBuf<MapData>) {
     loop {
         if let Some(event) = channel.next() {
             let event: FutexEvent = unsafe { trans(&event) };
+            debug!("{event:?}");
             web.process_event(event);
-            debug!("{:#?}", web);
+            debug!("{web:#?}");
         }
     }
 }

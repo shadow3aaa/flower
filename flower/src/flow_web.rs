@@ -67,7 +67,9 @@ impl FlowWeb {
             self.addr_node.insert(event.args.uaddr, node.clone());
             parent_node.borrow_mut().childs.push(node);
         } else {
-            self.childs.push(Rc::new(RefCell::new(Box::new(node))));
+            let node = Rc::new(RefCell::new(Box::new(node)));
+            self.addr_node.insert(event.args.uaddr, node.clone());
+            self.childs.push(node);
         }
     }
 
