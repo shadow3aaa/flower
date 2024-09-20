@@ -2,6 +2,7 @@ pub mod flow_web;
 
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
 use std::{env, os::fd::AsRawFd, ptr};
 
 use aya::maps::{MapData, RingBuf};
@@ -70,7 +71,7 @@ impl Flower {
         })
     }
 
-    pub fn update_blocking(&mut self) -> anyhow::Result<()> {
+    pub fn update_timeout(&mut self, timeout: Option<Duration>) -> anyhow::Result<()> {
         loop {
             let _ = self
                 .poll
@@ -85,7 +86,7 @@ impl Flower {
                 )
                 .unwrap();
             let mut events = Events::with_capacity(1);
-            let _ = self.poll.poll(&mut events, None);
+            let _ = self.poll.poll(&mut events, timeout);
 
             if let Some(event) = self.channel.next() {
                 let event: FutexEvent = unsafe { trans(&event) };
