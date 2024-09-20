@@ -1,6 +1,6 @@
 mod flow_web;
 
-use std::{env, ptr};
+use std::{env, os::fd::AsRawFd, process::Command, ptr};
 
 use aya::maps::{MapData, RingBuf};
 use aya::programs::TracePoint;
@@ -9,6 +9,8 @@ use aya_log::EbpfLogger;
 use flow_web::FlowWeb;
 use flower_common::{Args, FutexEvent};
 use log::{debug, warn};
+use mio::unix::SourceFd;
+use mio::{Events, Interest, Poll, Token};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -66,12 +68,28 @@ async fn main() -> Result<(), anyhow::Error> {
 
 async fn receiver(mut channel: RingBuf<MapData>) {
     let mut web = FlowWeb::new();
+    let mut poll = Poll::new().unwrap();
     loop {
+        let _ = poll
+            .registry()
+            .deregister(&mut SourceFd(&channel.as_raw_fd()));
+        poll.registry()
+            .register(
+                &mut SourceFd(&channel.as_raw_fd()),
+                Token(0),
+                Interest::READABLE,
+            )
+            .unwrap();
+        let mut events = Events::with_capacity(1);
+        let _ = poll.poll(&mut events, None);
+
         if let Some(event) = channel.next() {
             let event: FutexEvent = unsafe { trans(&event) };
-            debug!("{event:?}");
+            // debug!("{event:?}");
             web.process_event(event);
-            debug!("{web:#?}");
+            // debug!("{web:#?}");
+            Command::new("clear").status().unwrap();
+            web.analyze();
         }
     }
 }
