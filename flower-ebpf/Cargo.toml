@@ -24,9 +24,11 @@ codegen-units = 1
 rpath = false
 
 [profile.release]
-lto = true
-panic = "abort"
+overflow-checks = false
 codegen-units = 1
+lto = "fat"
+opt-level = 3
+strip = true
 
 [workspace]
 members = []
