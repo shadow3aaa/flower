@@ -9,24 +9,12 @@ aya = { git = "https://github.com/aya-rs/aya" }
 aya-log = { git = "https://github.com/aya-rs/aya" }
 flower-common = { path = "../flower-common", features = ["user"] }
 anyhow = "1"
-env_logger = "0.10"
 libc = "0.2"
 log = "0.4"
-tokio = { version = "1.25", features = [
-    "macros",
-    "rt",
-    "rt-multi-thread",
-    "net",
-    "signal",
-] }
 mio = { version = "1.0.2", features = ["os-ext"] }
 cpu-instructions-reader = "0.3.0"
 smallvec = "1.13.2"
 num_cpus = "1.16.0"
-
-[[bin]]
-name = "flower"
-path = "src/main.rs"
 
 [profile.release]
 overflow-checks = false

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, time::{Duration, Instant}};
 
 use cpu_instructions_reader::{
     InstructionNumber, InstructionNumberInstant, InstructionNumberReader,
@@ -10,6 +10,7 @@ type FlowWebNodeWarpper = Rc<RefCell<Box<FlowWebNode>>>;
 
 #[derive(Debug)]
 pub struct FlowWeb {
+    time_instant: Instant,
     childs: Vec<FlowWebNodeWarpper>,
     threads_pos: HashMap<u32, (FlowWebNodeWarpper, ThreadData)>,
     addr_node: HashMap<usize, FlowWebNodeWarpper>,
@@ -24,6 +25,7 @@ struct ThreadData {
 #[derive(Debug)]
 pub struct FlowWebNode {
     pub owner: u32,
+    pub timestamp: Duration,
     pub max_wake_count: i64,
     pub len: InstructionNumber,
     pub childs: Vec<FlowWebNodeWarpper>,
@@ -32,6 +34,7 @@ pub struct FlowWebNode {
 impl FlowWeb {
     pub fn new() -> Self {
         Self {
+            time_instant: Instant::now(),
             childs: Vec::new(),
             threads_pos: HashMap::new(),
             addr_node: HashMap::new(),
@@ -54,6 +57,7 @@ impl FlowWeb {
     fn process_wake_event(&mut self, event: FutexEvent) {
         let mut node = FlowWebNode {
             owner: event.tid,
+            timestamp: Instant::now() - self.time_instant,
             max_wake_count: event.ret,
             len: InstructionNumber::ZERO,
             childs: Vec::new(),
@@ -125,19 +129,18 @@ impl FlowWeb {
     }
 
     pub fn clear(&mut self) {
+        self.time_instant = Instant::now();
+        self.addr_node.clear();
         self.childs.clear();
         self.threads_pos.clear();
     }
 
-    pub fn analyze(&self) {
+    pub fn analyze(&self) -> Option<Vec<AnalyzeData>> {
         let mut cache = Vec::new();
         self.analyze_inner(Vec::new(), None, &mut cache);
-        if let Some(crital_path) = cache
+        cache
             .into_iter()
             .max_by_key(|datas| datas.iter().map(|data| data.len).sum::<InstructionNumber>())
-        {
-            println!("{:?}", crital_path);
-        }
     }
 
     fn analyze_inner(
@@ -148,6 +151,7 @@ impl FlowWeb {
     ) {
         if let Some(node) = node {
             let data = AnalyzeData {
+                timestamp: node.borrow().timestamp,
                 tid: node.borrow().owner,
                 len: node.borrow().len,
             };
@@ -170,6 +174,7 @@ impl FlowWeb {
 
 #[derive(Debug, Clone, Copy)]
 pub struct AnalyzeData {
+    pub timestamp: Duration,
     pub tid: u32,
     pub len: InstructionNumber,
 }
