@@ -7,10 +7,9 @@ use std::{env, os::fd::AsRawFd, ptr};
 use aya::maps::{MapData, RingBuf};
 use aya::programs::TracePoint;
 use aya::{include_bytes_aligned, maps, Ebpf};
-use aya_log::EbpfLogger;
 use flow_web::FlowWeb;
 use flower_common::{Args, FutexEvent};
-use log::{error, warn};
+use log::error;
 use mio::unix::SourceFd;
 use mio::{Events, Interest, Poll, Token};
 
@@ -47,10 +46,7 @@ impl Flower {
             env!("OUT_DIR"),
             "/ebpf_target/bpfel-unknown-none/release/flower"
         )))?;
-        if let Err(e) = EbpfLogger::init(&mut bpf) {
-            // This can happen if you remove all log statements from your eBPF program.
-            warn!("failed to initialize eBPF logger: {}", e);
-        }
+
         let program_enter: &mut TracePoint =
             bpf.program_mut("flower_futex_enter").unwrap().try_into()?;
         program_enter.load()?;
@@ -61,27 +57,27 @@ impl Flower {
         program_exit.attach("raw_syscalls", "sys_exit")?;
 
         let mut map = maps::Array::<_, Args>::try_from(bpf.map_mut("ARG").unwrap())?;
-        map.set(
-            0,
-            Args {
-                target_pid,
-            },
-            0,
-        )?;
+        map.set(0, Args { target_pid }, 0)?;
 
         let channel = RingBuf::try_from(bpf.take_map("CHANNEL").unwrap())?;
         let mut web = FlowWeb::new(target_pid);
         web.init_thread_data()?;
 
-        Ok(Self { channel, poll: Poll::new().unwrap(), web })
+        Ok(Self {
+            channel,
+            poll: Poll::new().unwrap(),
+            web,
+        })
     }
 
     pub fn update_blocking(&mut self) -> anyhow::Result<()> {
         loop {
-            let _ = self.poll
+            let _ = self
+                .poll
                 .registry()
                 .deregister(&mut SourceFd(&self.channel.as_raw_fd()));
-            self.poll.registry()
+            self.poll
+                .registry()
                 .register(
                     &mut SourceFd(&self.channel.as_raw_fd()),
                     Token(0),
