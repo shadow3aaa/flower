@@ -34,3 +34,6 @@ codegen-units = 1
 lto = "fat"
 opt-level = 3
 strip = true
+
+[build-dependencies]
+anyhow = "1"
