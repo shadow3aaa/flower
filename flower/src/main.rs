@@ -41,7 +41,8 @@ async fn main() -> Result<(), anyhow::Error> {
         // This can happen if you remove all log statements from your eBPF program.
         warn!("failed to initialize eBPF logger: {}", e);
     }
-    let program_enter: &mut TracePoint = bpf.program_mut("flower_futex_enter").unwrap().try_into()?;
+    let program_enter: &mut TracePoint =
+        bpf.program_mut("flower_futex_enter").unwrap().try_into()?;
     program_enter.load()?;
     program_enter.attach("raw_syscalls", "sys_enter")?;
     let program_exit: &mut TracePoint = bpf.program_mut("flower_futex_exit").unwrap().try_into()?;

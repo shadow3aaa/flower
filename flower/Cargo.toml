@@ -16,6 +16,7 @@ tokio = { version = "1.25", features = ["macros", "rt", "rt-multi-thread", "net"
 mio = { version = "1.0.2", features = ["os-ext"] }
 cpu-instructions-reader = "0.3.0"
 smallvec = "1.13.2"
+num_cpus = "1.16.0"
 
 [[bin]]
 name = "flower"
