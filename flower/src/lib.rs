@@ -1,5 +1,7 @@
 pub mod flow_web;
 
+use std::fs;
+use std::path::Path;
 use std::{env, os::fd::AsRawFd, ptr};
 
 use aya::maps::{MapData, RingBuf};
@@ -68,8 +70,10 @@ impl Flower {
         )?;
 
         let channel = RingBuf::try_from(bpf.take_map("CHANNEL").unwrap())?;
+        let mut web = FlowWeb::new(target_pid);
+        web.init_thread_data()?;
 
-        Ok(Self { channel, poll: Poll::new().unwrap(), web: FlowWeb::new() })
+        Ok(Self { channel, poll: Poll::new().unwrap(), web })
     }
 
     pub fn update_blocking(&mut self) -> anyhow::Result<()> {
@@ -105,6 +109,19 @@ impl Flower {
     pub fn clear(&mut self) {
         self.web.clear();
     }
+}
+
+pub fn list_threads(pid: u32) -> anyhow::Result<Vec<u32>> {
+    let path = Path::new("/proc").join(pid.to_string()).join("task");
+    let mut tids = Vec::new();
+    for entry in fs::read_dir(path)? {
+        if let Ok(entry) = entry {
+            let tid: u32 = entry.file_name().to_str().unwrap().parse()?;
+            tids.push(tid);
+        }
+    }
+
+    Ok(tids)
 }
 
 const unsafe fn trans<T>(buf: &[u8]) -> T {

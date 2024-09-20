@@ -1,4 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, time::{Duration, Instant}};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use cpu_instructions_reader::{
     InstructionNumber, InstructionNumberInstant, InstructionNumberReader,
@@ -6,13 +11,17 @@ use cpu_instructions_reader::{
 use flower_common::FutexEvent;
 use libc::{FUTEX_CMD_MASK, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET};
 
+use crate::list_threads;
+
 type FlowWebNodeWarpper = Rc<RefCell<Box<FlowWebNode>>>;
 
 #[derive(Debug)]
 pub struct FlowWeb {
+    pid: u32,
     time_instant: Instant,
     childs: Vec<FlowWebNodeWarpper>,
-    threads_pos: HashMap<u32, (FlowWebNodeWarpper, ThreadData)>,
+    threads_pos: HashMap<u32, FlowWebNodeWarpper>,
+    threads_data: HashMap<u32, ThreadData>,
     addr_node: HashMap<usize, FlowWebNodeWarpper>,
 }
 
@@ -32,13 +41,24 @@ pub struct FlowWebNode {
 }
 
 impl FlowWeb {
-    pub fn new() -> Self {
+    pub(super) fn new(pid: u32) -> Self {
         Self {
+            pid,
             time_instant: Instant::now(),
             childs: Vec::new(),
             threads_pos: HashMap::new(),
+            threads_data: HashMap::new(),
             addr_node: HashMap::new(),
         }
+    }
+
+    pub(super) fn init_thread_data(&mut self) -> anyhow::Result<()> {
+        self.threads_data.clear();
+        let tids = list_threads(self.pid)?;
+        for tid in tids {
+            self.threads_data.insert(tid, ThreadData::new(tid)?);
+        }
+        Ok(())
     }
 
     pub fn process_event(&mut self, event: FutexEvent) {
@@ -64,7 +84,16 @@ impl FlowWeb {
         };
         let num_cpus = num_cpus::get();
 
-        if let Some((parent_node, thread_data)) = self.threads_pos.get_mut(&event.tid) {
+        // find target thread data, or add a new one
+        let thread_data = if let Some(data) = self.threads_data.get_mut(&event.tid) {
+            data
+        } else {
+            let data = ThreadData::new(event.tid).unwrap();
+            self.threads_data.insert(event.tid, data);
+            self.threads_data.get_mut(&event.tid).unwrap()
+        };
+
+        if let Some(parent_node) = self.threads_pos.get_mut(&event.tid) {
             // update instants & create new node(add as parent node's child), move waker thread to new node
             let new_instants: Vec<_> = (0..num_cpus)
                 .map(|cpu| thread_data.reader.instant_of_spec(cpu as i32).unwrap())
@@ -81,19 +110,11 @@ impl FlowWeb {
             self.addr_node.insert(event.args.uaddr, node.clone());
             parent_node.borrow_mut().childs.push(node);
         } else {
-            // create new thread data & new node, move waker thread to new node
-            let reader = InstructionNumberReader::new(Some(event.tid as i32)).unwrap();
-            let thread_data = ThreadData {
-                instants: (0..num_cpus)
-                    .map(|cpu| reader.instant_of_spec(cpu as i32).unwrap())
-                    .collect(),
-                reader,
-            };
-
+            // create new node, move waker thread to new node
             let node = Rc::new(RefCell::new(Box::new(node)));
 
             self.threads_pos
-                .insert(event.tid, (node.clone(), thread_data));
+                .insert(event.tid, node.clone());
             self.addr_node.insert(event.args.uaddr, node.clone());
             self.childs.push(node);
         }
@@ -105,24 +126,19 @@ impl FlowWeb {
                 let num_cpus = num_cpus::get();
                 node.borrow_mut().max_wake_count -= 1;
 
-                if let Some((_, mut thread_data)) = self.threads_pos.remove(&event.tid) {
+                if let Some(mut thread_data) = self.threads_data.remove(&event.tid) {
                     // update instant & move thread to target node
                     thread_data.instants = (0..num_cpus)
                         .map(|cpu| thread_data.reader.instant_of_spec(cpu as i32).unwrap())
                         .collect();
                     self.threads_pos
-                        .insert(event.tid, (node.clone(), thread_data));
+                        .insert(event.tid, node.clone());
                 } else {
                     // create new thread data & move to target node
-                    let reader = InstructionNumberReader::new(Some(event.tid as i32)).unwrap();
-                    let thread_data = ThreadData {
-                        instants: (0..num_cpus)
-                            .map(|cpu| reader.instant_of_spec(cpu as i32).unwrap())
-                            .collect(),
-                        reader,
-                    };
+                    let thread_data = ThreadData::new(event.tid).unwrap();
                     self.threads_pos
-                        .insert(event.tid, (node.clone(), thread_data));
+                        .insert(event.tid, node.clone());
+                    self.threads_data.insert(event.tid, thread_data);
                 }
             }
         }
@@ -133,6 +149,7 @@ impl FlowWeb {
         self.addr_node.clear();
         self.childs.clear();
         self.threads_pos.clear();
+        let _ = self.init_thread_data();
     }
 
     pub fn analyze(&self) -> Option<Vec<AnalyzeData>> {
@@ -169,6 +186,19 @@ impl FlowWeb {
                 self.analyze_inner(history.clone(), Some(child.clone()), cache);
             }
         }
+    }
+}
+
+impl ThreadData {
+    pub(self) fn new(tid: u32) -> anyhow::Result<Self> {
+        let num_cpus = num_cpus::get();
+        let reader = InstructionNumberReader::new(Some(tid as i32))?;
+        Ok(ThreadData {
+            instants: (0..num_cpus)
+                .map(|cpu| reader.instant_of_spec(cpu as i32).unwrap())
+                .collect(),
+            reader,
+        })
     }
 }
 

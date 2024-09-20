@@ -3,7 +3,6 @@
 use aya_ebpf::{
     macros::{map, tracepoint}, maps::{self, HashMap, RingBuf}, programs::TracePointContext, EbpfContext
 };
-use aya_log_ebpf::debug;
 use flower_common::{
     error_codes::{ERR_CODE_ARG_NOT_INITED, ERR_CODE_NOT_TARGET_PROCESS},
     futex_args::FutexArgs,
