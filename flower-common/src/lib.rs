@@ -20,5 +20,6 @@ unsafe impl Pod for Args {}
 pub struct FutexEvent {
     pub tid: u32,
     pub args: FutexArgs,
+    pub timestamp_ns: u64,
     pub ret: i64,
 }

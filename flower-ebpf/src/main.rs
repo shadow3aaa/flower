@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 use aya_ebpf::{
-    macros::{map, tracepoint}, maps::{self, HashMap, RingBuf}, programs::TracePointContext, EbpfContext
+    helpers::bpf_ktime_get_ns, macros::{map, tracepoint}, maps::{self, HashMap, RingBuf}, programs::TracePointContext, EbpfContext
 };
 use flower_common::{
     error_codes::{ERR_CODE_ARG_NOT_INITED, ERR_CODE_NOT_TARGET_PROCESS, ERR_CODE_NOT_TARGET_THREAD},
@@ -110,6 +110,7 @@ fn try_flower_exit(ctx: TracePointContext) -> Result<u32, i64> {
 
     let event = FutexEvent {
         tid: ctx.pid(),
+        timestamp_ns: unsafe { bpf_ktime_get_ns() },
         args: futex_args,
         ret,
     };

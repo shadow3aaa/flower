@@ -62,8 +62,7 @@ impl Flower {
         map.set(0, Args { target_pid }, 0)?;
 
         let channel = RingBuf::try_from(bpf.take_map("CHANNEL").unwrap())?;
-        let mut web = FlowWeb::new(target_pid);
-        web.init_thread_data()?;
+        let web = FlowWeb::new(target_pid);
 
         let mut map = maps::Array::<_, i32>::try_from(bpf.map_mut("TOP_THREADS").unwrap()).unwrap();
         map.set(0, -1, 0).unwrap();
@@ -90,13 +89,9 @@ impl Flower {
     }
 
     pub fn try_update(&mut self) {
-        loop {
-            if let Some(event) = self.channel.next() {
-                let event: FutexEvent = unsafe { trans(&event) };
-                self.web.process_event(event);
-            } else {
-                break;
-            }
+        while let Some(event) = self.channel.next() {
+            let event: FutexEvent = unsafe { trans(&event) };
+            self.web.process_event(event);
         }
     }
 
@@ -116,13 +111,9 @@ impl Flower {
         let mut events = Events::with_capacity(1);
         let _ = self.poll.poll(&mut events, timeout);
 
-        loop {
-            if let Some(event) = self.channel.next() {
-                let event: FutexEvent = unsafe { trans(&event) };
-                self.web.process_event(event);
-            } else {
-                break;
-            }
+        while let Some(event) = self.channel.next() {
+            let event: FutexEvent = unsafe { trans(&event) };
+            self.web.process_event(event);
         }
 
         Ok(())
@@ -140,11 +131,9 @@ impl Flower {
 pub fn list_threads(pid: u32) -> anyhow::Result<Vec<u32>> {
     let path = Path::new("/proc").join(pid.to_string()).join("task");
     let mut tids = Vec::new();
-    for entry in fs::read_dir(path)? {
-        if let Ok(entry) = entry {
-            let tid: u32 = entry.file_name().to_str().unwrap().parse()?;
-            tids.push(tid);
-        }
+    for entry in (fs::read_dir(path)?).flatten() {
+        let tid: u32 = entry.file_name().to_str().unwrap().parse()?;
+        tids.push(tid);
     }
 
     Ok(tids)
