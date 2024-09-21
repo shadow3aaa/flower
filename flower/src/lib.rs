@@ -65,12 +65,28 @@ impl Flower {
         let mut web = FlowWeb::new(target_pid);
         web.init_thread_data()?;
 
+        let mut map = maps::Array::<_, i32>::try_from(bpf.map_mut("TOP_THREADS").unwrap()).unwrap();
+        map.set(0, -1, 0).unwrap();
+
         Ok(Self {
             channel,
             poll: Poll::new().unwrap(),
             web,
             bpf,
         })
+    }
+
+    pub fn set_top_threads(&mut self, threads: Option<Vec<u32>>) {
+        let mut map =
+            maps::Array::<_, i32>::try_from(self.bpf.map_mut("TOP_THREADS").unwrap()).unwrap();
+        if let Some(mut threads) = threads {
+            threads.truncate(10);
+            for (index, tid) in threads.into_iter().enumerate() {
+                map.set(index as u32, tid as i32, 0).unwrap();
+            }
+        } else {
+            map.set(0, -1, 0).unwrap();
+        }
     }
 
     pub fn try_update(&mut self) {

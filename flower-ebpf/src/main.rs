@@ -4,13 +4,15 @@ use aya_ebpf::{
     macros::{map, tracepoint}, maps::{self, HashMap, RingBuf}, programs::TracePointContext, EbpfContext
 };
 use flower_common::{
-    error_codes::{ERR_CODE_ARG_NOT_INITED, ERR_CODE_NOT_TARGET_PROCESS},
+    error_codes::{ERR_CODE_ARG_NOT_INITED, ERR_CODE_NOT_TARGET_PROCESS, ERR_CODE_NOT_TARGET_THREAD},
     futex_args::FutexArgs,
     Args, FutexEvent,
 };
 
 #[map]
 static ARG: maps::Array<Args> = maps::Array::<Args>::with_max_entries(1, 0);
+#[map]
+static TOP_THREADS: maps::Array<i32> = maps::Array::<i32>::with_max_entries(10, 0);
 #[map]
 static CHANNEL: RingBuf = RingBuf::with_byte_size(0x1000, 0);
 #[map]
@@ -31,6 +33,24 @@ fn try_flower_enter(ctx: TracePointContext) -> Result<u32, i64> {
 
     if ctx.tgid() != arg.target_pid {
         return Err(ERR_CODE_NOT_TARGET_PROCESS);
+    }
+
+    if TOP_THREADS.get(0) != Some(&-1) {
+        let mut is_top_threads = false;
+
+        for i in 0..10 {
+            if let Some(tid) = TOP_THREADS.get(i) {
+                if *tid == ctx.pid() as i32 {
+                    is_top_threads = true;
+                }
+            } else {
+                break;
+            }
+        }
+
+        if !is_top_threads {
+            return Err(ERR_CODE_NOT_TARGET_THREAD);
+        }
     }
 
     let syscall_id = unsafe { ctx.read_at::<u64>(8).unwrap() };

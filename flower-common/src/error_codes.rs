@@ -1,3 +1,4 @@
 pub const ERR_CODE_ARG_NOT_INITED: i64 = 1;
 pub const ERR_CODE_NOT_TARGET_PROCESS: i64 = 2;
-pub const ERR_CODE_FUTEX_FAILED: i64 = 3;
+pub const ERR_CODE_NOT_TARGET_THREAD: i64 = 3;
+pub const ERR_CODE_FUTEX_FAILED: i64 = 4;
