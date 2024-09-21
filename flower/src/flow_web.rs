@@ -13,7 +13,7 @@ use libc::{FUTEX_CMD_MASK, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE
 
 use crate::list_threads;
 
-type FlowWebNodeWarpper = Rc<RefCell<Box<FlowWebNode>>>;
+type FlowWebNodeWarpper = Rc<RefCell<FlowWebNode>>;
 
 #[derive(Debug)]
 pub struct FlowWeb {
@@ -96,7 +96,7 @@ impl FlowWeb {
         if let Some(parent_node) = self.threads_pos.get_mut(&event.tid) {
             // update instants & create new node(add as parent node's child), move waker thread to new node
             let new_instants: Vec<_> = (0..num_cpus)
-                .map(|cpu| thread_data.reader.instant_of_spec(cpu as i32).unwrap())
+                .map(|cpu| thread_data.reader.instant(cpu as i32).unwrap())
                 .collect();
             node.len = new_instants
                 .iter()
@@ -105,13 +105,13 @@ impl FlowWeb {
                 .sum();
             thread_data.instants = new_instants;
 
-            let node = Rc::new(RefCell::new(Box::new(node)));
+            let node = Rc::new(RefCell::new(node));
 
             self.addr_node.insert(event.args.uaddr, node.clone());
             parent_node.borrow_mut().childs.push(node);
         } else {
             // create new node, move waker thread to new node
-            let node = Rc::new(RefCell::new(Box::new(node)));
+            let node = Rc::new(RefCell::new(node));
 
             self.threads_pos
                 .insert(event.tid, node.clone());
@@ -129,7 +129,7 @@ impl FlowWeb {
                 if let Some(mut thread_data) = self.threads_data.remove(&event.tid) {
                     // update instant & move thread to target node
                     thread_data.instants = (0..num_cpus)
-                        .map(|cpu| thread_data.reader.instant_of_spec(cpu as i32).unwrap())
+                        .map(|cpu| thread_data.reader.instant(cpu as i32).unwrap())
                         .collect();
                     self.threads_pos
                         .insert(event.tid, node.clone());
@@ -195,7 +195,7 @@ impl ThreadData {
         let reader = InstructionNumberReader::new(Some(tid as i32))?;
         Ok(ThreadData {
             instants: (0..num_cpus)
-                .map(|cpu| reader.instant_of_spec(cpu as i32).unwrap())
+                .map(|cpu| reader.instant(cpu as i32).unwrap())
                 .collect(),
             reader,
         })

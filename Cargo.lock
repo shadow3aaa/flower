@@ -160,9 +160,9 @@ dependencies = [
 
 [[package]]
 name = "cpu-instructions-reader"
-version = "0.3.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cee0e8bba6c7d7d12ed52672eb2cfdc0f71e5e69fa9d6f09b4af758668659361"
+checksum = "be117e24414f2b8d2f85717f3695b8e5536373a04ea24de5ea01d6dc88d312ca"
 dependencies = [
  "cc",
  "derive_more",
