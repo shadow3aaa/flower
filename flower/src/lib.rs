@@ -18,6 +18,7 @@ pub struct Flower {
     channel: RingBuf<MapData>,
     poll: Poll,
     web: FlowWeb,
+    bpf: Ebpf,
 }
 
 impl Flower {
@@ -68,6 +69,7 @@ impl Flower {
             channel,
             poll: Poll::new().unwrap(),
             web,
+            bpf,
         })
     }
 
