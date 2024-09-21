@@ -88,9 +88,12 @@ impl FlowWeb {
         let thread_data = if let Some(data) = self.threads_data.get_mut(&event.tid) {
             data
         } else {
-            let data = ThreadData::new(event.tid).unwrap();
-            self.threads_data.insert(event.tid, data);
-            self.threads_data.get_mut(&event.tid).unwrap()
+            if let Ok(data) = ThreadData::new(event.tid) {
+                self.threads_data.insert(event.tid, data);
+                self.threads_data.get_mut(&event.tid).unwrap()
+            } else {
+                return;
+            }
         };
 
         if let Some(parent_node) = self.threads_pos.get_mut(&event.tid) {
@@ -113,8 +116,7 @@ impl FlowWeb {
             // create new node, move waker thread to new node
             let node = Rc::new(RefCell::new(node));
 
-            self.threads_pos
-                .insert(event.tid, node.clone());
+            self.threads_pos.insert(event.tid, node.clone());
             self.addr_node.insert(event.args.uaddr, node.clone());
             self.childs.push(node);
         }
@@ -131,14 +133,13 @@ impl FlowWeb {
                     thread_data.instants = (0..num_cpus)
                         .map(|cpu| thread_data.reader.instant(cpu as i32).unwrap())
                         .collect();
-                    self.threads_pos
-                        .insert(event.tid, node.clone());
+                    self.threads_pos.insert(event.tid, node.clone());
                 } else {
                     // create new thread data & move to target node
-                    let thread_data = ThreadData::new(event.tid).unwrap();
-                    self.threads_pos
-                        .insert(event.tid, node.clone());
-                    self.threads_data.insert(event.tid, thread_data);
+                    if let Ok(thread_data) = ThreadData::new(event.tid) {
+                        self.threads_pos.insert(event.tid, node.clone());
+                        self.threads_data.insert(event.tid, thread_data);
+                    }
                 }
             }
         }

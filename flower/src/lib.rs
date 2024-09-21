@@ -73,23 +73,34 @@ impl Flower {
         })
     }
 
-    pub fn update_timeout(&mut self, timeout: Option<Duration>) -> anyhow::Result<()> {
+    pub fn try_update(&mut self) {
         loop {
-            let _ = self
-                .poll
-                .registry()
-                .deregister(&mut SourceFd(&self.channel.as_raw_fd()));
-            self.poll
-                .registry()
-                .register(
-                    &mut SourceFd(&self.channel.as_raw_fd()),
-                    Token(0),
-                    Interest::READABLE,
-                )
-                .unwrap();
-            let mut events = Events::with_capacity(1);
-            let _ = self.poll.poll(&mut events, timeout);
+            if let Some(event) = self.channel.next() {
+                let event: FutexEvent = unsafe { trans(&event) };
+                self.web.process_event(event);
+            } else {
+                break;
+            }
+        }
+    }
 
+    pub fn update_timeout(&mut self, timeout: Option<Duration>) -> anyhow::Result<()> {
+        let _ = self
+            .poll
+            .registry()
+            .deregister(&mut SourceFd(&self.channel.as_raw_fd()));
+        self.poll
+            .registry()
+            .register(
+                &mut SourceFd(&self.channel.as_raw_fd()),
+                Token(0),
+                Interest::READABLE,
+            )
+            .unwrap();
+        let mut events = Events::with_capacity(1);
+        let _ = self.poll.poll(&mut events, timeout);
+
+        loop {
             if let Some(event) = self.channel.next() {
                 let event: FutexEvent = unsafe { trans(&event) };
                 self.web.process_event(event);
