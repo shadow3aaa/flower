@@ -88,14 +88,43 @@ impl Flower {
         }
     }
 
+    pub fn update(&mut self, timeout: Option<Duration>) {
+        let _ = self
+            .poll
+            .registry()
+            .deregister(&mut SourceFd(&self.channel.as_raw_fd()));
+        self.poll
+            .registry()
+            .register(
+                &mut SourceFd(&self.channel.as_raw_fd()),
+                Token(0),
+                Interest::READABLE,
+            )
+            .unwrap();
+        let mut events = Events::with_capacity(1);
+        let _ = self.poll.poll(&mut events, timeout);
+
+        if let Some(event) = self.channel.next() {
+            let event: FutexEvent = unsafe { trans(&event) };
+            self.web.process_event(event);
+        }
+    }
+
     pub fn try_update(&mut self) {
+        if let Some(event) = self.channel.next() {
+            let event: FutexEvent = unsafe { trans(&event) };
+            self.web.process_event(event);
+        }
+    }
+
+    pub fn try_update_all(&mut self) {
         while let Some(event) = self.channel.next() {
             let event: FutexEvent = unsafe { trans(&event) };
             self.web.process_event(event);
         }
     }
 
-    pub fn update_timeout(&mut self, timeout: Option<Duration>) -> anyhow::Result<()> {
+    pub fn update_all(&mut self, timeout: Option<Duration>) {
         let _ = self
             .poll
             .registry()
@@ -115,8 +144,6 @@ impl Flower {
             let event: FutexEvent = unsafe { trans(&event) };
             self.web.process_event(event);
         }
-
-        Ok(())
     }
 
     pub fn analyze(&self) -> Option<Vec<flow_web::AnalyzeData>> {
