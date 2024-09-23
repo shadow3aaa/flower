@@ -88,7 +88,7 @@ impl Flower {
         }
     }
 
-    pub fn update(&mut self, timeout: Option<Duration>) {
+    pub fn update(&mut self, timeout: Option<Duration>) -> bool {
         let _ = self
             .poll
             .registry()
@@ -107,24 +107,33 @@ impl Flower {
         if let Some(event) = self.channel.next() {
             let event: FutexEvent = unsafe { trans(&event) };
             self.web.process_event(event);
+            true
+        } else {
+            false
         }
     }
 
-    pub fn try_update(&mut self) {
+    pub fn try_update(&mut self) -> bool {
         if let Some(event) = self.channel.next() {
             let event: FutexEvent = unsafe { trans(&event) };
             self.web.process_event(event);
+            true
+        } else {
+            false
         }
     }
 
-    pub fn try_update_all(&mut self) {
+    pub fn try_update_all(&mut self) -> bool {
+        let mut result = false;
         while let Some(event) = self.channel.next() {
+            result = true;
             let event: FutexEvent = unsafe { trans(&event) };
             self.web.process_event(event);
         }
+        result
     }
 
-    pub fn update_all(&mut self, timeout: Option<Duration>) {
+    pub fn update_all(&mut self, timeout: Option<Duration>) -> bool {
         let _ = self
             .poll
             .registry()
@@ -140,10 +149,15 @@ impl Flower {
         let mut events = Events::with_capacity(1);
         let _ = self.poll.poll(&mut events, timeout);
 
+        let mut result = false;
+
         while let Some(event) = self.channel.next() {
+            result = true;
             let event: FutexEvent = unsafe { trans(&event) };
             self.web.process_event(event);
         }
+
+        result
     }
 
     pub fn analyze(&self) -> Option<Vec<flow_web::AnalyzeData>> {
