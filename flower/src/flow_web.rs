@@ -1,21 +1,26 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    rc::{Rc, Weak},
+};
 
 use flower_common::FutexEvent;
 use libc::{FUTEX_CMD_MASK, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET};
 
 type FlowWebNodeWarpper = Rc<RefCell<FlowWebNode>>;
+type FlowWebNodeWeakWarpper = Weak<RefCell<FlowWebNode>>;
 
 #[derive(Debug)]
 pub struct FlowWeb {
     pid: u32,
     childs: Vec<FlowWebNodeWarpper>,
-    threads_pos: HashMap<u32, FlowWebNodeWarpper>,
-    addr_node: HashMap<usize, FlowWebNodeWarpper>,
+    threads_pos: HashMap<u32, FlowWebNodeWeakWarpper>,
+    addr_node: HashMap<usize, FlowWebNodeWeakWarpper>,
 }
 
 #[derive(Debug)]
 pub struct FlowWebNode {
-    pub parent: Option<FlowWebNodeWarpper>,
+    pub parent: Option<FlowWebNodeWeakWarpper>,
     pub owner: u32,
     pub timestamp: u64,
     pub max_wake_count: i64,
@@ -64,22 +69,31 @@ impl FlowWeb {
         if let Some(parent_node) = self.threads_pos.get_mut(&event.tid) {
             // add new node as parent node's child
             node.borrow_mut().parent = Some(parent_node.clone());
-            parent_node.borrow_mut().childs.push(node.clone());
+            if let Some(parent_node) = parent_node.upgrade() {
+                parent_node.borrow_mut().childs.push(node.clone());
+            }
         } else {
             // add new node as root's child
             self.childs.push(node.clone());
         }
 
-        self.addr_node.insert(event.args.uaddr, node.clone());
-        self.threads_pos.insert(event.tid, node);
+        self.addr_node
+            .insert(event.args.uaddr, Rc::downgrade(&node));
+        self.threads_pos.insert(event.tid, Rc::downgrade(&node));
     }
 
     fn process_wait_event(&mut self, event: FutexEvent) {
-        if let Some(node) = self.addr_node.get(&event.args.uaddr) {
+        if let Some(node) = self
+            .addr_node
+            .get(&event.args.uaddr)
+            .and_then(|node| node.upgrade())
+        {
             if node.borrow().max_wake_count > 0 {
                 node.borrow_mut().max_wake_count -= 1;
-                self.threads_pos.insert(event.tid, node.clone());
+                self.threads_pos.insert(event.tid, Rc::downgrade(&node));
             }
+        } else {
+            self.addr_node.remove(&event.args.uaddr);
         }
     }
 
