@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     rc::{Rc, Weak},
+    time::Duration,
 };
 
 use flower_common::FutexEvent;
@@ -12,6 +13,8 @@ type FlowWebNodeWeakWarpper = Weak<RefCell<FlowWebNode>>;
 
 #[derive(Debug)]
 pub struct FlowWeb {
+    len: u64,
+    last_update_timestamp: Option<u64>,
     pid: u32,
     childs: Vec<FlowWebNodeWarpper>,
     threads_pos: HashMap<u32, FlowWebNodeWeakWarpper>,
@@ -20,6 +23,7 @@ pub struct FlowWeb {
 
 #[derive(Debug)]
 pub struct FlowWebNode {
+    pub last_update_timestamp: u64,
     pub parent: Option<FlowWebNodeWeakWarpper>,
     pub owner: u32,
     pub timestamp: u64,
@@ -34,8 +38,10 @@ pub struct AnalyzeData {
 }
 
 impl FlowWeb {
-    pub(super) fn new(pid: u32) -> Self {
+    pub(super) fn new(pid: u32, len: Duration) -> Self {
         Self {
+            len: len.as_nanos() as u64,
+            last_update_timestamp: None,
             pid,
             childs: Vec::new(),
             threads_pos: HashMap::new(),
@@ -43,14 +49,49 @@ impl FlowWeb {
         }
     }
 
+    fn retain_timeout_nodes(&mut self) {
+        if self.last_update_timestamp.is_none() {
+            return;
+        }
+
+        let mut childs = Vec::new();
+        self.search_new_childs(&mut childs, None);
+        self.childs = childs;
+    }
+
+    fn search_new_childs(
+        &self,
+        childs: &mut Vec<FlowWebNodeWarpper>,
+        node: Option<FlowWebNodeWarpper>,
+    ) {
+        if let Some(node) = node {
+            if self.last_update_timestamp.unwrap() - node.borrow().last_update_timestamp <= self.len
+            {
+                childs.push(node);
+            } else {
+                for child in &node.borrow().childs {
+                    self.search_new_childs(childs, Some(child.clone()));
+                }
+            }
+        } else {
+            for child in &self.childs {
+                self.search_new_childs(childs, Some(child.clone()));
+            }
+        }
+    }
+
     pub fn process_event(&mut self, event: FutexEvent) {
         let cmd = event.args.futex_op & FUTEX_CMD_MASK;
         match cmd {
             FUTEX_WAIT | FUTEX_WAIT_BITSET => {
+                self.last_update_timestamp = Some(event.timestamp_ns);
                 self.process_wait_event(event);
+                self.retain_timeout_nodes();
             }
             FUTEX_WAKE | FUTEX_WAKE_BITSET => {
+                self.last_update_timestamp = Some(event.timestamp_ns);
                 self.process_wake_event(event);
+                self.retain_timeout_nodes();
             }
             _ => (),
         }
@@ -58,6 +99,7 @@ impl FlowWeb {
 
     fn process_wake_event(&mut self, event: FutexEvent) {
         let node = FlowWebNode {
+            last_update_timestamp: event.timestamp_ns,
             parent: None,
             owner: event.tid,
             timestamp: event.timestamp_ns,
@@ -66,12 +108,14 @@ impl FlowWeb {
         };
         let node = Rc::new(RefCell::new(node));
 
-        if let Some(parent_node) = self.threads_pos.get_mut(&event.tid) {
+        if let Some(parent_node) = self
+            .threads_pos
+            .get_mut(&event.tid)
+            .and_then(|node| node.upgrade())
+        {
             // add new node as parent node's child
-            node.borrow_mut().parent = Some(parent_node.clone());
-            if let Some(parent_node) = parent_node.upgrade() {
-                parent_node.borrow_mut().childs.push(node.clone());
-            }
+            parent_node.borrow_mut().childs.push(node.clone());
+            node.borrow_mut().parent = Some(Rc::downgrade(&parent_node));
         } else {
             // add new node as root's child
             self.childs.push(node.clone());
@@ -90,6 +134,7 @@ impl FlowWeb {
         {
             if node.borrow().max_wake_count > 0 {
                 node.borrow_mut().max_wake_count -= 1;
+                node.borrow_mut().last_update_timestamp = event.timestamp_ns;
                 self.threads_pos.insert(event.tid, Rc::downgrade(&node));
             }
         } else {

@@ -17,12 +17,12 @@ use mio::{Events, Interest, Poll, Token};
 pub struct Flower {
     channel: RingBuf<MapData>,
     poll: Poll,
-    web: FlowWeb,
+    pub web: FlowWeb,
     bpf: Ebpf,
 }
 
 impl Flower {
-    pub fn new(target_pid: u32) -> anyhow::Result<Self> {
+    pub fn new(target_pid: u32, len: Duration) -> anyhow::Result<Self> {
         // Bump the memlock rlimit. This is needed for older kernels that don't use the
         // new memcg based accounting, see https://lwn.net/Articles/837122/
         let rlim = libc::rlimit {
@@ -62,7 +62,7 @@ impl Flower {
         map.set(0, Args { target_pid }, 0)?;
 
         let channel = RingBuf::try_from(bpf.take_map("CHANNEL").unwrap())?;
-        let web = FlowWeb::new(target_pid);
+        let web = FlowWeb::new(target_pid, len);
 
         let mut map = maps::Array::<_, i32>::try_from(bpf.map_mut("TOP_THREADS").unwrap()).unwrap();
         map.set(0, -1, 0).unwrap();
