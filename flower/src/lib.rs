@@ -22,7 +22,7 @@ pub struct Flower {
 }
 
 impl Flower {
-    pub fn new(target_pid: u32, len: Duration) -> anyhow::Result<Self> {
+    pub fn new(target_pid: u32, len: Option<Duration>) -> anyhow::Result<Self> {
         // Bump the memlock rlimit. This is needed for older kernels that don't use the
         // new memcg based accounting, see https://lwn.net/Articles/837122/
         let rlim = libc::rlimit {

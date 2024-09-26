@@ -13,7 +13,7 @@ type FlowWebNodeWeakWarpper = Weak<RefCell<FlowWebNode>>;
 
 #[derive(Debug)]
 pub struct FlowWeb {
-    len: u64,
+    len: Option<u64>,
     last_update_timestamp: Option<u64>,
     pid: u32,
     childs: Vec<FlowWebNodeWarpper>,
@@ -38,9 +38,9 @@ pub struct AnalyzeData {
 }
 
 impl FlowWeb {
-    pub(super) fn new(pid: u32, len: Duration) -> Self {
+    pub(super) fn new(pid: u32, len: Option<Duration>) -> Self {
         Self {
-            len: len.as_nanos() as u64,
+            len: len.map(|len| len.as_nanos() as u64),
             last_update_timestamp: None,
             pid,
             childs: Vec::new(),
@@ -50,32 +50,34 @@ impl FlowWeb {
     }
 
     fn retain_timeout_nodes(&mut self) {
-        if self.last_update_timestamp.is_none() {
-            return;
-        }
+        if let Some(len) = self.len {
+            if self.last_update_timestamp.is_none() {
+                return;
+            }
 
-        let mut childs = Vec::new();
-        self.search_new_childs(&mut childs, None);
-        self.childs = childs;
+            let mut childs = Vec::new();
+            self.search_new_childs(len, &mut childs, None);
+            self.childs = childs;
+        }
     }
 
     fn search_new_childs(
         &self,
+        len: u64,
         childs: &mut Vec<FlowWebNodeWarpper>,
         node: Option<FlowWebNodeWarpper>,
     ) {
         if let Some(node) = node {
-            if self.last_update_timestamp.unwrap() - node.borrow().last_update_timestamp <= self.len
-            {
+            if self.last_update_timestamp.unwrap() - node.borrow().last_update_timestamp <= len {
                 childs.push(node);
             } else {
                 for child in &node.borrow().childs {
-                    self.search_new_childs(childs, Some(child.clone()));
+                    self.search_new_childs(len, childs, Some(child.clone()));
                 }
             }
         } else {
             for child in &self.childs {
-                self.search_new_childs(childs, Some(child.clone()));
+                self.search_new_childs(len, childs, Some(child.clone()));
             }
         }
     }
